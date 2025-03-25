@@ -28,23 +28,27 @@ def carregar_planilha():
             raise ValueError("Aba 'CHAMADOS LASA' não encontrada na planilha.")
         
         df = pd.read_excel(xls, sheet_name="CHAMADOS LASA")
-
-        # Converter a coluna de contato para string
         df["CONTATO"] = df["CONTATO"].astype(str)
-
+        
         messagebox.showinfo("Sucesso", "Planilha carregada com sucesso!")
         atualizar_tabela()
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao carregar a planilha: {str(e)}")
 
-def atualizar_tabela():
+def atualizar_tabela(filtro_loja=""):
     """Atualiza a exibição da tabela com os dados carregados."""
     for i in tree.get_children():
         tree.delete(i)
     
     if df is not None:
-        for _, row in df.iterrows():
+        df_filtrado = df if not filtro_loja else df[df["LOJA"].astype(str) == filtro_loja]
+        for _, row in df_filtrado.iterrows():
             tree.insert("", "end", values=(row["OS"], row["CHAMADO"], row["LOJA"], row["EQUIPAMENTO"], row["RESUMO"], row["CONTATO"], row["STATUS FRESH"]))
+
+def buscar_loja():
+    """Filtra os chamados pelo número da loja."""
+    loja = entry_busca.get().strip()
+    atualizar_tabela(loja)
 
 def registrar_envio(loja):
     """Registra um envio no log com data e hora."""
@@ -69,26 +73,22 @@ def enviar_mensagem():
         messagebox.showerror("Erro", "Número de contato inválido.")
         return
 
-    status_fresh = status_fresh if status_fresh.strip() else "Sem informação"
-
     mensagem = f"""
 Olá, aqui é da *Zhaz*! 👋  
 Temos esse chamado abaixo aberto no sistema.  
 Pode confirmar para dar início ao suporte?  
 
-📌 *Detalhes do Chamado*
--------------------------------
-🔹 *OS:* {os}
-🔹 *Chamado:* {chamado}
-🏬 *Loja:* {loja}
-🔧 *Equipamento:* {equipamento}
-💬 *Resumo:* {resumo}
-📞 *Contato:* {contato}
-📌 *Status Fresh:* {status_fresh}
--------------------------------
+📌 *Detalhes do Chamado*  
+🔹 *OS:* {os}  
+🔹 *Chamado:* {chamado}  
+🏬 *Loja:* {loja}  
+🔧 *Equipamento:* {equipamento}  
+💬 *Resumo:* {resumo}  
+📞 *Contato:* {contato}  
+📌 *Status Fresh:* {status_fresh}  
 Aguardamos seu retorno! Obrigado. ✅
 
-🔍 *Checklist de Diagnóstico*
+🔍 *Checklist de Diagnóstico*  
 1️⃣ Confirma o número da loja?  
 2️⃣ Qual o problema do equipamento?  
 3️⃣ Quantos equipamentos tem na loja?  
@@ -108,15 +108,11 @@ Aguardamos seu retorno! Obrigado. ✅
         pyperclip.copy(mensagem)
         link_whatsapp = f"whatsapp://send?phone=55{contato}"
         webbrowser.open(link_whatsapp)
-
         time.sleep(5)
-
         pyautogui.hotkey("ctrl", "v")
         time.sleep(0.5)
         pyautogui.press("enter")
-
         registrar_envio(loja)
-
         messagebox.showinfo("Sucesso", f"Mensagem enviada para a Loja {loja}!")
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao enviar mensagem: {str(e)}")
@@ -126,16 +122,11 @@ def gerar_relatorio():
     top = tk.Toplevel(root)
     top.title("Relatório de Envios")
     top.geometry("500x300")
-
-    colunas = ["Loja", "Data e Hora"]
-    tree_rel = ttk.Treeview(top, columns=colunas, show="headings")
-
-    for col in colunas:
+    tree_rel = ttk.Treeview(top, columns=["Loja", "Data e Hora"], show="headings")
+    for col in ["Loja", "Data e Hora"]:
         tree_rel.heading(col, text=col)
         tree_rel.column(col, width=200)
-
     tree_rel.pack(expand=True, fill="both")
-
     for envio in log_envios:
         tree_rel.insert("", "end", values=(envio["Loja"], envio["Data e Hora"]))
 
@@ -144,55 +135,35 @@ def baixar_relatorio():
     if not log_envios:
         messagebox.showerror("Erro", "Nenhum envio registrado.")
         return
-
     caminho = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Arquivos Excel", "*.xlsx")])
-    
-    if not caminho:
-        return
-
-    try:
-        df_relatorio = pd.DataFrame(log_envios)
-        df_relatorio.to_excel(caminho, index=False, engine="openpyxl")
+    if caminho:
+        pd.DataFrame(log_envios).to_excel(caminho, index=False, engine="openpyxl")
         messagebox.showinfo("Sucesso", f"Relatório salvo em:\n{caminho}")
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao salvar o relatório: {str(e)}")
-
-def sobre():
-    """Exibe informações sobre o programa."""
-    messagebox.showinfo("Sobre", "Desenvolvido por Gabriel Menezes\nData: 01/2025")
 
 # Criando interface gráfica
 root = tk.Tk()
 root.title("Gerenciador de Chamados LASA")
 root.geometry("900x500")
-
-# Criando menu
 menu_bar = Menu(root)
-menu_bar.add_command(label="Sobre", command=sobre)
+menu_bar.add_command(label="Sobre", command=lambda: messagebox.showinfo("Sobre", "Desenvolvido por Gabriel Menezes"))
 root.config(menu=menu_bar)
-
 frame_top = tk.Frame(root)
 frame_top.pack(pady=10)
-
+entry_busca = tk.Entry(frame_top)
+entry_busca.pack(side=tk.LEFT, padx=5)
+btn_buscar = tk.Button(frame_top, text="Buscar Loja", command=buscar_loja)
+btn_buscar.pack(side=tk.LEFT, padx=5)
 btn_carregar = tk.Button(frame_top, text="Carregar Planilha", command=carregar_planilha)
-btn_carregar.pack(side=tk.LEFT, padx=10)
-
+btn_carregar.pack(side=tk.LEFT, padx=5)
 btn_enviar = tk.Button(frame_top, text="Enviar Mensagem", command=enviar_mensagem)
-btn_enviar.pack(side=tk.LEFT, padx=10)
-
+btn_enviar.pack(side=tk.LEFT, padx=5)
 btn_relatorio = tk.Button(frame_top, text="Gerar Relatório", command=gerar_relatorio)
-btn_relatorio.pack(side=tk.LEFT, padx=10)
-
+btn_relatorio.pack(side=tk.LEFT, padx=5)
 btn_salvar_relatorio = tk.Button(frame_top, text="Baixar Relatório", command=baixar_relatorio)
-btn_salvar_relatorio.pack(side=tk.LEFT, padx=10)
-
-colunas = ["OS", "CHAMADO", "LOJA", "EQUIPAMENTO", "RESUMO", "CONTATO", "STATUS FRESH"]
-tree = ttk.Treeview(root, columns=colunas, show="headings")
-
-for col in colunas:
+btn_salvar_relatorio.pack(side=tk.LEFT, padx=5)
+tree = ttk.Treeview(root, columns=["OS", "CHAMADO", "LOJA", "EQUIPAMENTO", "RESUMO", "CONTATO", "STATUS FRESH"], show="headings")
+for col in ["OS", "CHAMADO", "LOJA", "EQUIPAMENTO", "RESUMO", "CONTATO", "STATUS FRESH"]:
     tree.heading(col, text=col)
-    tree.column(col, width=150)
-
+    tree.column(col, width=120)
 tree.pack(expand=True, fill="both")
-
 root.mainloop()
